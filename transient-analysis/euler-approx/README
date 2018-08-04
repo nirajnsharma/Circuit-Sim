@@ -1,0 +1,7 @@
+Implements the following approximation techniques to solve an ODE:
+  - Forward Euler
+  - Backward Euler
+  - Trapezoidal
+
+Also includes a gnuplot command file to plot the results
+
