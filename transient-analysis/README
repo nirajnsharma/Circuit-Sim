@@ -1,0 +1,5 @@
+Uses the three approximation techniques to plot the two node-voltages of a
+simple R-C circuit. Assumes a sinusoidal input.
+
+Also includes a gnuplot command file to plot the results
+
