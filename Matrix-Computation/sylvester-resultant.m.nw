@@ -1,0 +1,87 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\begin{document}
+
+@
+\section{Sylvester Resultant}
+Given two polynomials, $f(x)$ and $g(x)$, the application is to find the following:
+\begin{enumerate}
+\item Does the pair of polynomials have a common factor?
+\item What is the degree of the common factor?
+\end{enumerate}
+
+In order to answer the above, we construct a Sylvester matrix, and find its \emph{resultant}. The resultant is another word for the determinant of the matrix.
+
+The input to the function, which construct the matrix are two vectors. These are the coefficients of the given polynomials of degrees $m$ and $n$ respectively. The Sylvester Matrix would be a $(m+n)\times(m+n)$ matrix.
+<<definition>>=
+r = 0;
+function [S, r] = fn_sylvester_resultant (f, g)
+   # f and g are the vectors representing the polynomials
+   # assuming that the coefficients of f and g are in descending powers of x
+   # the degree is one less than the individual vectors
+   m = length (f)-1
+   n = length (g)-1
+
+   # Flip the vectors to begin with the coefficient of the constant term
+   f = flip(f);
+   g = flip (g);
+
+<<padding>>
+<<loop>>
+
+@
+\noindent Let $f(x)$, a degree $m$, and $g(x)$, a degree $n$ polynomial be:
+\begin{equation}
+  f(x) = f_0 + f_1*x + f_2*x^2 + ... + x^m 
+\end{equation}
+\begin{equation}
+  g(x) = g_0 + g_1*x + g_2*x^2 + ... + x^n
+\end{equation}
+
+<<padding>>=
+   # Padding vectors with n zeros, and m zeros
+   z_n = zeros(n)(1,:);
+   z_m = zeros(m)(1,:);
+
+   # Concatenate z_n to f to create (m+n) padded vector
+   f_padded = [f, z_n]
+
+   # Concatenate z_m to g to create (m+n) padded vector
+   g_padded = [g, z_m]
+
+@
+Then the:
+\begin{itemize}
+\item first row of $S$ is $(f_0 f_1 ... f_{m-1} 1 0 ... 0)$
+\item second row of $S$ is $(0 f_0 f_1 ... f_{m-1} 1 0 ... 0)$
+\item the following $n-2$ are similar obtained by shifting the previous row by one position, and shifting in a zero. 
+\item the $n+1$ row is $(g_0 g_1 ... g_{n-1} 1 0 ... 0)$
+\item and then shift each row until the $m+n$ row
+\end{itemize}
+
+<<loop>>=
+   # First row of S (using f)
+   S = f_padded;
+
+   # The next n rows of S
+   for i=1:(n)
+      sLast = S(i,:);
+      S = [S; shift(sLast, 1)];
+   end
+
+   # The (n+2)th row of S (using g)
+   S = [S; g_padded];
+
+   # The next m rows of S
+   for i=(n+2):(n+m)
+      sLast = S(i,:);
+      S = [S; shift(sLast, 1)];
+   end
+
+   r = det (S);
+   return;
+endfunction
+
+@
+\end{document}

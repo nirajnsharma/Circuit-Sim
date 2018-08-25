@@ -1,0 +1,121 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\title{Permutation Matrices}
+\author{184077001@iitb.ac.in}
+\begin{document}
+\maketitle
+
+@
+A permutation matrix is square and has one non-zero entry in each row and
+column. The non-zero entry is always $1$. An identity matrix is a permutation
+matrix which does the identity permutation. 
+
+A permutation matrix can be thought of as being obtained by some premutation on
+the rows or columns of an identity matrix. When the permutation matrix is
+pre-multiplied with an argument matrix, the same permutations are present in the
+product as row permutations. If the same permutation matrix is post-multiplied
+with an argument matrix, the same permutations are present as column
+permutations.
+
+For instance, $I_3$ is the $3 \times 3$ identity matrix:
+\[
+I_3 = \begin{bmatrix}
+      1 & 0 & 0 \\ 0 & 1 & 0 \\ 0 & 0 & 1
+      \end{bmatrix}
+\]
+
+\section*{Pre-multiplication -- Row Permutation}
+Swapping rows 2 and 3 will yield the following permutation matrix:
+\[
+P_{r23} = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 0 & 1 \\ 0 & 1 & 0 \end{bmatrix}
+\]
+
+Let A be our matrix which is going to be subject to permutations. As I want to
+illustrate pre and post multiplications using the same permutation matrix I have
+chosen A to be square in this example.
+\[
+A = \begin{bmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \\ 7 & 8 & 9 \end{bmatrix}
+\]
+
+Pre-multiplying A by $P_{r23}$, permutes A's rows:
+
+\begin{equation}
+ P_{r23} \times A =
+\begin{bmatrix} 1 & 0 & 0 \\ 0 & 0 & 1 \\ 0 & 1 & 0 \end{bmatrix}
+\begin{bmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \\ 7 & 8 & 9 \end{bmatrix}
+=
+\begin{bmatrix} 1 & 2 & 3 \\ 7 & 8 & 9 \\ 4 & 5 & 6 \end{bmatrix}
+\end{equation}
+
+\section*{Post-multiplication -- Column Permutation}
+The matrix, $P_{r23}$ can also be thought to be obtained by swapping columns 2
+and 3 of the identity matrix $I_3$.
+\[
+P_{r23} = P_{c23} = \begin{bmatrix} 1 & 0 & 0 \\ 0 & 0 & 1 \\ 0 & 1 & 0 \end{bmatrix}
+\]
+
+Post-multiplying A by $P_{c23}$, permutes A's columns:
+
+\begin{equation}
+ A \times P_{c23} =
+\begin{bmatrix} 1 & 2 & 3 \\ 4 & 5 & 6 \\ 7 & 8 & 9 \end{bmatrix}
+\begin{bmatrix} 1 & 0 & 0 \\ 0 & 0 & 1 \\ 0 & 1 & 0 \end{bmatrix}
+=
+\begin{bmatrix} 1 & 3 & 2 \\ 4 & 6 & 5 \\ 7 & 9 & 8 \end{bmatrix}
+\end{equation}
+
+To detect if a square matrix is a permutation matrix, add all the rows (or
+columns), it should result in a vector with all ones. In addition, the number of
+non-zero entries in the matrix should be equal to number of rows (or columns).
+Here's the octave code:
+
+<<definition>>=
+r=0;
+function isAPermMatrix=fn_detectPermutationMatrix (P)
+
+# Is P square?
+[rows, cols] = size (P);
+if (rows != cols) 
+   isAPermMatrix = false;
+   return;
+else
+   # Add all the rows (or columns) of P
+   rowSum = P(1,:);
+   for (i=2:rows)
+      rowSum = rowSum + P(i,:); 
+   end
+
+   # Should be all 1s
+   for (i=1:cols)
+      if (rowSum(i) != 1)
+         isAPermMatrix = false;
+         return;
+      endif
+   end
+
+   # Count the number of non-zero elements of P
+   nonZeros = 0;
+   for (i=1:rows)
+      for (j=1:cols)
+         if (P(i,j) != 0)
+            nonZeros++;
+         endif
+      end
+   end
+
+   # Should be equal to number of rows (or columns)
+   if (nonZeros != rows)
+      isAPermMatrix = false;
+      return;
+   else
+      isAPermMatrix = true;
+      return;
+   endif
+endif
+endfunction
+
+@
+There might be better way which avoids the nested for loops at the end. Column
+addition along with row addition doesn't work either.
+\end{document}

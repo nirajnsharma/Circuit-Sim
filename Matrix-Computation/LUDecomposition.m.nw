@@ -1,0 +1,120 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\title{LU Decomposition}
+\author{184077001@iitb.ac.in}
+\begin{document}
+\maketitle
+
+@
+The L is lower-triangular and U is upper-triangular. Decompose a given $A$ as
+\[A = LU\] so that solving $Ax = b$ is simply forward-substitution and
+backward-substitution.
+
+The LU decomposition comprises of the following steps (assuming square input
+matrices). The input matrix is $A$.
+
+Given a column number, j, of the square matrix A, return the gauss
+transform matrix for that column. The gauss transform matrix is obtained by
+replacing a sub-column of the identity matrix with elements using the diagonal
+element of that column of A as the pivot. The pivot should not misbehave and do
+things like become zero.
+
+<<helpers>>=
+A = [4 4 2; 4 5 3; 2 3 3];
+% Given a nxn identity matrix change the jth lower sub-column of the matrix to
+% create a lower-triangular matrix component
+function G=fn_mkGComponent (v, p, n, j)
+   % v is the vector of length p - the vector from the diagonal element to the
+   % end of the column
+   G = eye(n);
+   for (i = j:n)     # Rows j-n
+      G(i,j) = v(i-j+1);
+   end
+
+   return;
+endfunction
+
+<<invLowTri>>
+
+@
+The inverse of a gauss-transform matrix is obtained by simply changing the signs
+of the non-diagonal, non-zero elements as this is a lower-triangular matrix.
+
+<<invLowTri>>=
+% Invert a lower-triangular matrix
+function L=fn_invLowTri (G);
+   n = size (G,1);
+   L = G;
+   for (r=2:n)
+      for (c=1:(r-1))
+         L(r,c) = -G(r,c);
+      end
+   end
+   return;
+endfunction
+
+<<mkGaussTransform>>
+
+@
+Putting the above components together we can compute one gauss transformer and
+its inverse for a given square matrix. The function also takes the column number
+as input as this function would need to iterate through all columns.
+
+<<mkGaussTransform>>=
+% Given a column number, j, of a square matrix A, return the gauss transform
+% matrix for that column, and its inverse.
+function [G,GInv]=fn_mkGaussTransform (A, j)
+   n = size (A, 1);
+
+   # Extract the sub-column of A
+   column = A (:, j);
+   subColumn = column (j:end);
+   newSC = subColumn;
+
+   scLen = size (subColumn, 1);
+   % subColumn (1) is the pivot
+   for (i = 1:scLen)
+      if (i == 1)
+         newSC(i) = 1;
+      else
+         newSC(i) = -subColumn(i)/subColumn(1);
+      endif
+   end
+
+   G = fn_mkGComponent (newSC, scLen, n, j);
+
+   % Invert G to get this L component
+   GInv = fn_invLowTri (G);
+   return;
+endfunction
+
+<< LUDecompose >>
+
+@
+The $U$ component is obtained by computing $G$ for each column, applying that G
+on A, and computing G for the next column on the \emph{modified} A, and so on,
+until we run out of columns. The $L$ component is simultaneously obtained by
+multiplying the inverses of the transforms for the individual columns
+
+<< LUDecompose >>=
+% Create the upper-triangular component for a given square matrix A, by repeatedly
+% applying the gaussian transformation for each column of A. The
+% lower-triangular component is optained by multiplying the inverses of the
+% transforms
+function [U,L]=fn_LUDecompose (A);
+   n = size (A,1);
+   U = A;
+   L = eye(n);
+
+   % Proceed along the diagonal
+   for (j = 1:(n-1))
+      [Gj, Lj] = fn_mkGaussTransform (A, j);
+      U = Gj * A;
+      L = L  * Lj;
+      A = U;
+   end
+endfunction
+
+@
+\end{document}

@@ -1,0 +1,65 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\begin{document}
+
+@
+\section{Low-Rank Approximation}
+There are many instances, where an approximation of the data represented by a
+matrix $A_{m \times n}$ would be sufficient. The approximation I am referring to
+here is called a \emph{rank approximation}.
+
+Another way of thinking about our matrix $A : \Re^m \rightarrow \Re^n$ is as a
+system which takes a vector $x \in \Re^m$ and returns $Ax \in \Re^n$. In fact the
+ratio of the norms of the output and the input vectors would give the norm of
+$A$. 
+
+Now, assume we have a matrix, $A_k$ which has rank $k \leq r$, where $r$ is the
+rank of $A$. The matrix, $A_k$ is a low-rank approximation of $A$. The
+approximation error is given by finding the Frobenius Norm of $A - A_k$. What
+follows is an octave routine to find the rank approximation of $A$ to a rank
+$k$.
+
+<<boilerplate>>=
+r = 0;
+function B = fn_low_rank_approx (A, k)
+<<svd>>
+<<loop>>
+
+@
+\noindent We will start with the SVD. The low-rank approximation is created by
+summing the first k components of:
+\begin{equation}
+\Sigma \sigma_i * u_i * v_i^T
+\end{equation}
+
+<<svd>>=
+[u, d, v] = svd (A);
+
+@
+\noindent Here, $u_i$ and $v_i$ are the $i^th$ column vector of the u and v
+matrices. Remember, we need to take the transpose of the column vector of v.
+
+<<loop>>=
+approx_a = d(1,1) * u(:,1) * (v(:,1))'
+
+if (k == 1)
+   B = approx_a;
+   return;
+endif
+
+for r = 2:k
+   approx_a = approx_a + (d(r,r) * u(:,r) * (v(:,r))');
+end
+
+B = approx_a;
+return;
+
+endfunction
+
+@
+\noindent The loop, essentially adds all the partial sums upto the desired rank.
+If the desired rank were to be equal to the original rank, then the
+approximation would become equal to the original matrix.
+
+\end{document}
