@@ -1,0 +1,182 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\title{Householder's Transformation}
+\author{184077001@iitb.ac.in}
+\begin{document}
+\maketitle
+
+@
+For the HH transformation, our aim is to find the matrices which
+will transform each sub-column of the input $A$ by reflection to
+$\alpha\times e_j$, where $e_j$ is the $j^th$ sub-coloumn of the
+identity matrix. 
+
+In general, to reflect a vector $x$ to $y$, we need to
+pre-multiply x with a matrix:
+\[
+P = I - 2 \times vv^{T}/(v^{T}v)
+\]
+
+where, $v$ is some scalar multiple of $x + (\| x \| \times e_1)$.
+Here the $e_1$ length is the same as the length of $x$. The
+matrix $P$ is an orthogonal matrix, and is called a
+\emph{Householder reflector}.
+
+The transformation comprises of the following steps (assuming
+square input matrices). The input matrix is $A$.
+
+<<tb>>=
+A = [0.8147 0.0975 0.1576;
+     0.9058 0.2785 0.9706;
+     0.1270 0.5469 0.9572];
+
+<<houseHReflector>>
+
+@
+\subsection*{Step One}
+Given a vector, x, (in general, this will be the
+coloumn/sub-coloumn of the square matrix A), return the
+Householder reflector matrix for that vector.
+
+<<houseHReflector>>=
+% Given a vector, x, compute the Householder reflector for it
+function [H, v]=fn_houseHReflector (x, j)
+   normX = norm (x);
+   lenX = size (x, 1);
+   e1 = eye (lenX) (:,1);        % extract the first col of the I
+   hVector = x + (normX .* e1);  % the householder vector
+   normSqhVector = hVector'*hVector;
+
+   % the reflector matrix
+   H = eye (lenX);
+   H = H - ((2/normSqhVector) .* (hVector * hVector')); 
+   v = hVector;
+   return;
+endfunction
+
+<<houseHMultiply>>
+
+@
+\subsection*{Step Two}
+Apply the transformation (there is no need to actually multiply
+the complete the matrix). This just works out to $4n$ operations.
+\[
+(I_{nxn} - 2v_{nx1}v^{T}_{1xn}) x_{nx1} = x_{nx1} - (2v_{nx1}(v^{T}x)_{1x1})
+\]
+
+<<houseHMultiply>>=
+% Given a vector, x, and a Householder vector, v, compute the
+% output after applying the reflection on x
+function r=houseHMultiply (x, v);
+   scaledX = v'*x;
+   vNormSq = v'*v;
+   scaledX = ((2 * scaledX)/vNormSq);
+   r = x - (scaledX*v);
+   return;
+endfunction
+
+<<padH>>
+
+@
+The H matrices created are sized to $p\times p$ where $p$ is the
+length of the input vector $x$. However, x may be a sub-column of
+the input matrix, A (except for the first column). So, if we want
+to apply $H$ or $A$, we need to make it full size by padding
+extra rows and columns.
+
+<<padH>>=
+% H is lenX-by-lenX. In order to apply on the original matrix of
+% which x is a sub-coloumn, we need to pad H to make it nxn. j
+% indicates which column in the original matrix the vector
+% belonged to. j extra rows and columns need to be padded
+function H=fn_padH (h, n, j);
+   H = eye(n);
+   hSz = size (h, 1);
+   H(j:n, j:n) = h;
+   return;
+endfunction
+
+<<Rj>>
+
+@
+\subsection*{One iteration of R}
+To calculate the R for one iteration of QR decomposition, we need
+to repeat steps one and two for each column of the input matrix.
+Effectively, we are generating the reflector using the first
+column of the input matrix, and applying it on all the columns of
+the matrix.
+
+<<Rj>>=
+% Compute jth iteration of R for QR decomposition of a square
+% matrix, A. The input is the jth iteration of the input matrix.
+% j is (1:n-1) for a nxn matrix.
+function [Hj, Rj]=fn_gen_Rj (Aj);
+   n = size (Aj, 1);
+
+   % Extract the first-column of Aj
+   x = Aj (:, 1);
+
+   % Generate the reflector using the first column of Aj
+   [Hj,v] = fn_houseHReflector (x, 1);
+   
+   % Apply the reflector on each column of Aj
+   for (i=1:n)
+      x = Aj (:, i);
+      r = houseHMultiply (x, v);
+      if (i == 1)
+         Rj = r;
+      else
+         Rj = [Rj, r];
+      endif
+   end
+
+   return;
+endfunction
+
+<<QR>>
+
+@
+\subsection*{Final R Matrix}
+The final R is applying the $R_j$ generator progressively smaller
+and smaller sub-matrices of the original input, $A$. The
+sub-matrices are obtained by proceeding along the diagonal of
+$A$. It is important to remember that the rows above the pivot
+point (the diagonal element), and the columns to the left of the
+pivot point, are unaffected in this iteration of the
+transformation.
+
+\subsection*{Final Q Matrix}
+The $H$ matrices have the property that $H_i = H_i^{-1} = H_i^T$. So,
+we have the following very useful relations:
+
+\[
+(H_{n}...H_2H_1)A = R
+\]
+\[
+A = (H_{n}...H_2H_1)^{-1}R = (H_1H_2...H_n)R = QR
+\]
+
+<<QR>>=
+% Top-level function to decompose A to QR
+function [Q,R]=fn_QRDecompose (A);
+   n = size (A, 1);
+
+   % Intial iteration -- pivot: A(1,1)
+   [Q, R] = fn_gen_Rj (A); % Q = H1, R = R1
+
+   % proceed along A's diagonal
+   for (i=2:(n-1))
+      [H_i, R_i] = fn_gen_Rj (R(i:n, i:n));
+      
+      % Replace the rows and cols which were used from the
+      % previous iteration to create this iteration's input with
+      % the ouput from this iteration. This new R becomes the
+      % input to the next iteration
+      R (i:n, i:n) = R_i;
+      Q = Q * fn_padH(H_i, n, i);
+   end
+   return;
+endfunction
+@
+\end{document}
