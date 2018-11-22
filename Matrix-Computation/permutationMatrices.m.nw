@@ -81,13 +81,20 @@ if (rows != cols)
    return;
 else
    # Add all the rows (or columns) of P
-   rowSum = P(1,:);
-   for (i=2:rows)
-      rowSum = rowSum + P(i,:); 
+   # The second argument gives the dimension along which the
+   # summation happens
+   rowSum = sum (P, 2);
+   colSum = sum (P, 1);
+
+   # Both rowSum and colSum Should be all 1s
+   for (i=1:cols)
+      if (colSum(i) != 1)
+         isAPermMatrix = false;
+         return;
+      endif
    end
 
-   # Should be all 1s
-   for (i=1:cols)
+   for (i=1:rows)
       if (rowSum(i) != 1)
          isAPermMatrix = false;
          return;

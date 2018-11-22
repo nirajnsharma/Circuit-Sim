@@ -9,13 +9,13 @@
 @
 For the HH transformation, our aim is to find the matrices which
 will transform each sub-column of the input $A$ by reflection to
-$\alpha\times e_j$, where $e_j$ is the $j^th$ sub-coloumn of the
-identity matrix. 
+$\alpha\times e_j$, where $e_j$ is the $j^{th}$ sub-column of
+the identity matrix. 
 
 In general, to reflect a vector $x$ to $y$, we need to
 pre-multiply x with a matrix:
 \[
-P = I - 2 \times vv^{T}/(v^{T}v)
+P = I - \frac{2}{v^{T}v}\times vv^{T}
 \]
 
 where, $v$ is some scalar multiple of $x + (\| x \| \times e_1)$.
@@ -36,7 +36,7 @@ A = [0.8147 0.0975 0.1576;
 @
 \subsection*{Step One}
 Given a vector, x, (in general, this will be the
-coloumn/sub-coloumn of the square matrix A), return the
+column/sub-column of the square matrix A), return the
 Householder reflector matrix for that vector.
 
 <<houseHReflector>>=
@@ -62,7 +62,7 @@ endfunction
 Apply the transformation (there is no need to actually multiply
 the complete the matrix). This just works out to $4n$ operations.
 \[
-(I_{nxn} - 2v_{nx1}v^{T}_{1xn}) x_{nx1} = x_{nx1} - (2v_{nx1}(v^{T}x)_{1x1})
+(I_{n\times n} - \frac{2}{v^{T}v}\times v_{n\times 1}v^{T}_{1\times n}) x_{n\times 1} = x_{n\times 1} - (\frac{2}{v^{T}v}\times (v^{T}x)\times v_{n\times 1})
 \]
 
 <<houseHMultiply>>=
@@ -87,7 +87,7 @@ extra rows and columns.
 
 <<padH>>=
 % H is lenX-by-lenX. In order to apply on the original matrix of
-% which x is a sub-coloumn, we need to pad H to make it nxn. j
+% which x is a sub-column, we need to pad H to make it nxn. j
 % indicates which column in the original matrix the vector
 % belonged to. j extra rows and columns need to be padded
 function H=fn_padH (h, n, j);
