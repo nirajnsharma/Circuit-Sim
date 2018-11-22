@@ -1,0 +1,433 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\title{Multi-Variate Newton Raphsons Using Lapack}
+\author{184077001@iitb.ac.in}
+\begin{document}
+\maketitle
+
+<<includes>>=
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+int debug = 1;
+
+<<jacobian>>
+
+@
+Multi-variate Newton Raphsons with $n$ equations for $n$
+variables involves iteratively solving an equation of the form:
+\[
+Jh = f
+\], where J is the $n\times n$ Jacobian matrix formed by
+partially differentiating the $n$ equations against each
+variable. So, if $f_1, f_2, \ldots, f_n$ are the $n$ equations in
+variables $x_1, x_2, \ldots, x_n$, then:
+\[
+J =
+\begin{bmatrix} 
+\frac{\partial f_1}{\partial x_1} \frac{\partial f_1}{\partial x_2} \ldots \frac{\partial f_1}{\partial x_n} \\
+\frac{\partial f_2}{\partial x_1} \frac{\partial f_2}{\partial x_2} \ldots \frac{\partial f_2}{\partial x_n} \\
+\ldots \\
+\frac{\partial f_n}{\partial x_1} \frac{\partial f_n}{\partial x_2} \ldots \frac{\partial f_n}{\partial x_n} \\
+\end{bmatrix} 
+\]
+
+Now, $J[r][c]$ refers to the $r^{th}$ equation, and the $c^{th}$
+variable. However, as the fortran routine we are using, expects
+matrixes in column major form, we have two options. Generate J
+and then transpose, or generate J in column major form. In order
+to generate in column-major form, the terms would be $J[c][r]$
+which would refer to the $c^{th}$ variable, and the $r^{th}$
+equation.
+
+<<jacobian>>=
+/*
+ * This function computes the value of the Jacobian matrix terms
+ * at that input vector of values. J(x) = dF(x)
+ */
+void fn_J (double* J, double *v) {
+   double k1 = 3.125e-2;
+   double k2 = 0.25;
+   double v1 = v[0];
+   double v2 = v[1];
+   double v3 = v[2];
+   double v4 = v[3];
+
+   // Var-1
+   if (v1 > v2) {
+      // Var-1, Eqn-1 (df[0]/dv[0])
+      J[0] = (1.0/4.0) + (1.0/2.0) + (2.0*k1*(v1-v2));
+      // Var-1, Eqn-2 (df[1]/dv[0])
+      J[1] = 2.0*k1*(v1-v2);
+   } else {
+      // Var-1, Eqn-1 (df[0]/dv[0])
+      J[0] = (1/4.0) + (1/2.0) - (2*k1*(v1-v2));
+      // Var-1, Eqn-2 (df[1]/dv[0])
+      J[1] = -2.0*k1*(v1-v2);
+   }
+
+   // Var-1, Eqn-3 (df[2]/dv[0])
+   J[2] = 1.0/2.0;
+   // Var-1, Eqn-4 (df[3]/dv[0])
+   J[3] = 0.0;
+
+   // Var-2
+   if (v1 > v2) {
+      // Var-2, Eqn-1 (df[0]/dv[1])
+      J[4] = 2.0*k1*(v2-v1);
+      // Var-2, Eqn-2 (df[1]/dv[1])
+      J[5] = (2.0*k1*(v2-v1)) - (1.0/8.0);
+   } else {
+      // Var-2, Eqn-1 (df[0]/dv[1])
+      J[4] = -2.0*k1*(v2-v1);
+      // Var-2, Eqn-2 (df[1]/dv[1])
+      J[5] = -(2.0*k1*(v2-v1)) - (1.0/8.0);
+   }
+
+   // Var-2, Eqn-3 (df[2]/dv[1])
+   J[6] = 0.0;
+
+   // Var-2, Eqn-4 (df[3]/dv[1])
+   J[7] = -1.0/8.0;
+   
+
+   if (v1 > v2) {
+      // Var-3, Eqn-1 (df[0]/dv[2])
+      J[2][0] = -1.0/2.0;
+      // Var-4, Eqn-1 (df[0]/dv[3])
+      J[3][0] = 0.0;
+
+      // Var-3, Eqn-2 (df[1]/dv[2])
+      J[2][1] = 0.0;
+      // Var-4, Eqn-2 (df[1]/dv[3])
+      J[3][1] = (1.0/8.0);
+   } else {
+      J[2][0] = -1.0/2.0;
+      J[3][0] = 0.0;
+
+      J[2][1] = 0.0;
+      J[3][1] = (1.0/8.0);
+   }
+
+   // Var-3, Eqn-3 (df[2]/dv[2])
+   J[2][2] = -(1.0/2.0) - (1.0/4.0) - (1.0/8.0);
+   // Var-4, Eqn-3 (df[2]/dv[3])
+   J[3][2] = 1.0/8.0;
+
+   if (v4 > 0) {
+      // Var-3, Eqn-4 (df[3]/dv[2])
+      J[2][3] = -1.0/8.0;
+      // Var-4, Eqn-4 (df[3]/dv[3])
+      J[3][3] = (1.0/8.0) + (1.0/8.0) + (2.0*k2*v4);
+   } else {
+      J[2][3] = -1.0/8.0;
+      J[3][3] = (1.0/8.0) + (1.0/8.0) - (2.0*k2*v4);
+   }
+}
+
+<<F(x)>>
+
+@
+For each iteration of NR, you are solving for the $\Delta$ from
+the current guess $X$ towards the root using:
+\[
+F(X_0 + \Delta) = F(X_0) + \Delta\times J(X_0)
+\]
+
+Please note that $X_0$ here is a vector of all the values of the
+multiple variables, and $F(X_0)$ is the vector of the $n$
+functions at $X_0$. If $X_0 + \Delta$ is the root then the above
+reduces to the familiar form:
+
+\[
+\Delta\times J(X_0) = -F(X_0)
+\]
+
+The following function generate the function $F$. Also note that
+the sign of the currents through the non-linear elements require
+careful evaluations of the signs of the voltages across them.
+When the voltage across the non-linear element is positive, the
+current term is positive. The current is negative when the
+voltage across is negative.
+
+<<F(x)>>=
+/*
+ * This function computes the value of the multi-variable
+ * function vector, given an input vector of values. F(x)
+ */
+void fn_F (double* f, double *v) {
+   double k1 = 3.125e-2;
+   double k2 = 0.25;
+   double v1 = v[0];
+   double v2 = v[1];
+   double v3 = v[2];
+   double v4 = v[3];
+
+   // Equation 1 (node 1)
+   if (v1 > v2) {
+      f[0] =   ((v1-20.0)/4.0)
+             + ((v1-v3)/2.0)
+             + (k1*(v1-v2)*(v1-v2));
+   } else {
+      f[0] =   ((v1-20.0)/4.0)
+             + ((v1-v3)/2.0)
+             - (k1*(v1-v2)*(v1-v2));
+   }
+   
+   // Equation 2 (node 2)
+   if (v1 > v2) {
+      f[1] =   (k1*(v1-v2)*(v1-v2))
+             - ((v2-v4)/8.0);
+   } else {
+      f[1] = - (k1*(v1-v2)*(v1-v2))
+             - ((v2-v4)/8.0);
+   }
+
+   // Equation 3 (node 3)
+   f[2] =   ((v1-v3)/2.0)
+          - (v3/4.0)
+          - ((v3-v4)/8.0);
+
+   // Equation 4 (node 4)
+   if (v4 > 0) {
+      f[3] =   (k2*v4*v4)
+             - ((v3-v4)/8.0)
+             - ((v2-v4)/8.0);
+   } else {
+      f[3] = - (k2*v4*v4)
+             - ((v3-v4)/8.0)
+             - ((v2-v4)/8.0);
+   }
+
+   if (debug > 1) {
+      printf ("\t:Fn = [%e, %e, %e, %e]\n",
+         f[3], f[2], f[1], f[0]);
+   }
+}
+
+<<lapack-prototype>>
+
+@
+In order to solve the equation, $Jh = f$, we are using the LAPACK
+solver. It is important to note that the dgesv function modifies
+both $A$ and $B$ when executed. So, if called in a loop, both of
+these need to be reinitialized before invoking the function
+again.
+
+<<lapack-prototype>>=
+/*
+ * Function prototype of LAPACK A=bx solver
+ */
+void dgesv_ (
+     int*    N          // num of equations           
+   , int*    NRHS       // num of cols on RHS         
+   , double* A          // the A matrix (LDAxN)       
+   , int*    LDA        // leading dim of A           
+   , int*    IPIV       // o/p indicating permutations
+   , double* B          // the RHS on i/p, soln on o/p
+   , int*    LDB        // leading dim of A           
+   , int*    INFO);     // information about the op   
+
+<<transposeJ>>
+
+@
+As these routines were written to use FORTRAN's column-major data
+representation for matrices, we need to transpose from C's
+row-major form to the column major form.
+
+<<transposeJ>>=
+/*
+ * This function transposes an input, NxN matrix
+ */
+void fn_transposeJ (double *J, double *JT, int n) {
+   int r, c;
+   for (r=0; r<n; r++) {
+      for (c=0; c<n; c++) {
+         JT[(r*n)+c] = J[(c*n)+r];  // C -> R, and R -> C
+      }
+   }
+}
+
+<<norm2>>
+
+@
+We also need a routine to compute the norm-2 of the function
+vector to check how close we are to the estimated root.
+
+<<norm2>>=
+double fn_norm2 (double* f, int n) {
+   int i;
+   double norm2 = 0.0;
+   for (i=0; i<n; i++) {
+      norm2 += (f[i] * f[i]);
+   }
+   norm2 = fabs (sqrt (norm2));
+   if (debug > 1) {
+      printf ("\t:||f|| = %11.4e\n", norm2);
+   }
+   return (norm2);
+}
+
+<<NRLoop>>
+
+@
+The actual NR iteration-loop is similar to the single variable
+case, the only difference being that we now operate on matrices,
+and use the dgesv to solve for the $\Delta$, rather than direct
+division.
+
+<<NRLoop>>=
+/*
+ * The NR iteration for multiple-variables
+ */
+void fn_nrMV (
+     double* v_initial
+   , double tolerance
+   , int iterations
+   , int numVar)
+{
+   int curIter = 0;
+   int i=0;
+
+   // vector holding the values for the current iteration
+   double* v_curV = (double *) malloc (numVar*sizeof (double));
+
+   // Jacobian matrix holding the value of the differential terms
+   // for the current iteration
+    double* v_J = (double *) malloc (numVar*numVar*sizeof (double));
+
+   // Transpose of Jacobian matrix as LAPACK routines expect
+   // matrices in column-major form
+   // double* v_JT = (double *) malloc (numVar*numVar*sizeof (double));
+
+   // vector holding the value of the functions for the current
+   // iteration
+   double* v_F = (double *) malloc (numVar*sizeof (double));
+
+   // Norm-2 of the current function value, used to decide if we
+   // are close enough to the root
+   double norm2F;
+
+   // IPIV array (for dgesv, we don't really use it here)
+   int* ipiv = (int *) malloc (numVar*sizeof (int));
+
+   // INFO from dgesv
+   int dgesvInfo;
+
+   // NRHS for dgesv
+   int nrhs = 1;
+
+   // Initialize the v-vector
+   for (i=0; i<numVar; i++) v_curV[i] = v_initial[i];
+
+   // The NR loop
+   while (curIter < iterations) {
+      if (debug > 0) {
+         printf ("NR [%d]:\n", curIter);
+         printf ("\t:vn = [%e, %e, %e, %e]\n",
+            v_curV[3], v_curV[2], v_curV[1], v_curV[0]);
+      }
+
+      // Compute the functions
+      fn_F (v_F, v_curV);
+
+      // Check the norm and break if it is below tolerance
+      norm2F = fn_norm2 (v_F, numVar);
+      if (fabs (norm2F) < tolerance) {
+         if (debug > 0) {
+            printf ("NR [%d]: ROOT FOUND: \n", curIter);
+            for (i=0; i<numVar; i++)
+               printf ("\t f[%d] = %11.4e\n", i, v_F[i]);
+         }
+         break;
+      }
+
+      // Compute the Jacobian
+      fn_J (v_J, v_curV);
+
+      // Ommitting the J_val check to check for very small values
+      // of det(J)
+
+      // Solve delta*J = F, to get the next update for the
+      // variables
+      // Transpose J, because dgesv expects it
+      // fn_transposeJ (v_J, v_JT, numVar);
+
+      // Invert the signs of f as we take it to the RHS
+      for (i=0; i<numVar; i++) f[i] = -f[i]; 
+
+      dgesv_ (
+           &numVar      // num of equations 
+         , &nrhs        // num of cols on RHS         
+         , v_J          // the A matrix (LDAxN)       
+         , &numVar      // LDA: leading dim of A           
+         , ipiv         // o/p indicating permutations
+         , v_F          // the RHS on i/p, soln on o/p
+         , &numVar      // LDB: leading dim of B           
+         , &dgesvInfo   // information about the op   
+      );
+      
+      // Update the variables
+      for (i=0; i<numVar; i++) v_curV[i] = v_curV[i] + v_F[i];
+      if (debug > 0) {
+         printf ("\t:vn+1 = [%e, %e, %e, %e]\n",
+            v_curV[3], v_curV[2], v_curV[1], v_curV[0]);
+      }
+
+      curIter++;
+   }
+
+   // Did we exit the loop due to the break or because we ran out
+   // of iterations?
+   if (fabs (norm2F) < tolerance) {
+      for (i=0; i<numVar; i++) v_initial[i] = v_curV[i];
+      free (v_curV);
+      // free (v_J);
+      // free (v_JT);
+      free (v_F);
+      free (ipiv);
+      return;
+   }
+   
+   else {
+      printf ("NR did not converge in %d iterations\n", curIter);
+      printf ("Something is wrong. Quitting \n");
+      free (v_curV);
+      free (v_J);
+      free (v_JT);
+      free (v_F);
+      free (ipiv);
+      exit (1);
+   }
+}
+
+int main (void) {
+   // Number of variables
+   int numVar = 4;
+
+   // Values of variables
+   double* v_varVal = (double *) malloc (numVar*sizeof (double));
+
+   // An iterator
+   int i = 0;
+
+   // Initially variable values set to 0
+   for (i=0; i<numVar; i++) {
+      v_varVal[i] = 0.0;
+   }
+   
+   fn_nrMV (v_varVal, 1.0e-8, 100, numVar);
+   for (i=0; i<numVar; i++) {
+      printf ("v_varVal[%d] = %11.4e\n", i, v_varVal[i]);
+   }
+
+   free (v_varVal);
+}
+
+@
+I have ommitted the check to see if the differential term (here,
+the J matrix) is too close to 0 (or equivalently, the det is too
+small). 
+\end{document}

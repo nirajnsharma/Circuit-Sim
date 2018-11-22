@@ -1,0 +1,296 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\title{Particle Swarm Optimizer}
+\author{184077001@iitb.ac.in}
+\begin{document}
+\maketitle
+
+<<includes>>=
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+int debug = 1;      // Print debug messages
+
+<<definitions>>
+
+@
+The Particle Swarm Optimizer (PSO) belongs to a broader class of
+evolutionary computational techniques/algorithms. In particular,
+PSO models the social behaviour of bird and insects. 
+
+It is a metaheuristic (does not make an assumption about the
+objective function), and also does not use the gradient. Expects
+randomness to get it out of a local minima -- the swarm gets
+attracted towards the paticle with the best current location.
+
+In our specific example, we are searching in two-dimentional
+space, and Coordinate is the type for a location in that search
+space. $N$ represents the number of particles inthe swarm. $I$
+represents the number of iterations of the algorithm.
+
+<<definitions>>=
+#define N 50        // The number of particles in the swarm
+#define I 40        // Numberof iterations
+typedef struct {    // A coordinate in the search space
+    double x, y;
+} Coordinate;
+
+<<dataStructures>>
+
+@
+We need a whole set of helper functions as we work through the
+steps of the optimizer. These functions, will work on a common
+set of data structures, and I have declared them as globals here.
+Ordinarily I would like to pass them as inputs and outputs, but
+here they are arrays and a global definition is more convenient
+in C. Here are the list of globals:
+
+\begin{description}
+\item[velocity:] is an n-array and contains the velocity of each
+particle in two-dimensions. Each member is of type Coordinate,
+indicating the velocity along x and y
+
+\item[position:] is an n-array and contains the position of each
+particle in two-dimensions. Each member is of type Coordinate,
+indicating the velocity along x and y
+
+\item[pPosBest:] is an n-array and contains the position of each
+particle in two-dimensions when they recorded their best value of
+the objective function. Each member is of type Coordinate,
+indicating the velocity along x and y
+
+\item[pObjBest:] is an n-array and contains the value of the
+objective function for each particle in two-dimensions when they
+recorded their best value of the objective function. Each member
+is of type double (type of value computed for the objective
+function).
+
+\item[gBest:] is the position of the particle which has recorded
+the best objective function value in the current interation. It
+is of type Coordinate.
+
+\end{description}
+
+<<dataStructures>>=
+Coordinate  velocity [N];       // Velocity (two dimensional)
+Coordinate  position [N];       // Position (two dimensional)
+Coordinate  pPosBest [N];       // Position of previous best
+double      pObjBest [N];       // Position of previous best
+Coordinate  gBest;              // Position of global best
+
+<<genRandAB>>
+
+@
+The function \verb|gen_randAB| generates a random number between
+two bounds $a$ and $b$. This is used to generate the initial
+positions of the particles, and also to later generate random
+numbers to modify the velocity on each iteration for each
+particle.
+
+<<genRandAB>>=
+/*
+ * Generates a random number between a, b
+ */
+double gen_randAB (double a, double b) {
+    double r = rand ();
+    r = a + (((b-a) * r)/(double) RAND_MAX);
+    return (r);
+}
+<<assignInitialPos>>
+
+@
+The function \verb|fn_assignInitialPos| assigns an initial
+position randomly to each particle bounded by the min and max
+coorinates of the search space.
+
+<<assignInitialPos>>=
+/*
+ * Assign initial positions to all particles randomly. As this is
+ * done in the beginning, it is also the initial pPosBest for
+ * each particle
+ */
+void fn_assignInitialPos (Coordinate min, Coordinate max) {
+    int p;
+    for (p=0; p<N; p++) {
+        position[p].x   = gen_randAB (min.x, max.x);
+        position[p].y   = gen_randAB (min.y, max.y);
+        pPosBest[p]     = position[p];
+    }
+}
+
+<<computeObjective>>
+
+@
+The function \verb|fn_computeObjective| computes the objective
+value for each particle at its current position. 
+
+<<computeObjective>>=
+/*
+ * Compute objective value of each particle at their current
+ * position. If it is the first iteration, the pObjBest is set to
+ * the current objective value. gBest value is also assigned here
+ */
+void fn_computeObjective (int iteration) {
+    int p = 0;
+    double objective, bestObj;
+    for (p=0; p<N; p++) {
+        objective = (
+            sin (position[p].x) * cos (position[p].y)
+        ) + (0.25 * position[p].x);
+
+        // Initialize the global best for the first particle
+        if (p == 0) {
+            gBest   = position[0];
+            bestObj = objective;
+        } else {
+            if (objective < bestObj) {   // Found a new best
+                bestObj = objective;
+                gBest   = position[p];
+            }
+        }
+
+        // If we are here for the first time, initialize the
+        // pObjBest for each particle
+        if (iteration == 0) {
+            pObjBest[p] = objective;
+        } else {
+            // Update the pObjBest only if the current objective
+            // is better. Also record the position.
+            if (objective < pObjBest[p]) {  // Found a new best
+                pObjBest[p] = objective;
+                pPosBest[p] = position[p];
+            }
+        }
+    }
+}
+
+<<computeVelocity>>
+
+@
+The function, \verb|fn_compute_velocity| computes the velocity of each particle based on the PSO formula:
+\[
+v_{i,j} = \omega v_{i,(j-1)} + \phi 
+\]
+
+<<computeVelocity>>=
+void fn_computeVelocity () {
+    int p = 0;
+
+    // Constants
+    double omega    = 0.75;
+    double phi1     = 1.50;
+    double phi2     = 1.50;
+
+    double r1x      = gen_randAB (0.0, 1.0);
+    double r2x      = gen_randAB (0.0, 1.0);
+    double r1y      = gen_randAB (0.0, 1.0);
+    double r2y      = gen_randAB (0.0, 1.0);
+
+    for (p=0; p<N; p++) {
+        velocity[p].x   =
+              (omega * velocity [p].x)
+            + (phi1 * r1x * (pPosBest[p].x - position[p].x))
+            + (phi2 * r2x * (gBest.x - position[p].x));
+        velocity[p].y   =
+              (omega * velocity [p].y)
+            + (phi1 * r1y * (pPosBest[p].y - position[p].y))
+            + (phi2 * r2y * (gBest.y - position[p].y));
+    }
+}
+
+<<updatePosition>>
+
+@
+The function \verb|fn_updatePosition| updates the position of a
+particle based on the velocity. Further, it prevents a particle
+from leaving the search space.
+
+<<updatePosition>>=
+/*
+ * Update the position of each particle based on their
+ * velocity. Make sure the particle does not leave the search
+ * space
+ */
+void fn_updatePosition (Coordinate min, Coordinate max) {
+    int p = 0;
+    for (p=0; p<N; p++) {
+        if (   ((position[p].x + velocity[p].x) > min.x)
+            && ((position[p].x + velocity[p].x) < max.x)) {
+            position[p].x = position[p].x + velocity[p].x;
+        }
+        if (   ((position[p].y + velocity[p].y) > min.y)
+            && ((position[p].y + velocity[p].y) < max.y)) {
+            position[p].y = position[p].y + velocity[p].y;
+        }
+    }
+}
+
+<<main>>
+
+@
+The main function puts it all together - implementing the main
+loop of the POS.
+
+
+<<main>>=
+/*
+ * The main program - putting it all together
+ */
+int main (void) {
+    // The min and max coordinates of the search space
+    Coordinate min = { x:0.0, y:0.0 };
+    Coordinate max = { x:8.0, y:8.0 };
+    int iteration = 0;
+    int p = 0;
+
+    FILE* pts = fopen ("pts.dat", "w");
+
+    // Seed the random number generator
+    srand (240379);
+
+    // Randomly assign initial position to all particles between
+    // min and max coordinates
+    fn_assignInitialPos (min, max);
+
+    // The main PSO loop
+    for (iteration=0; iteration<I; iteration++) {
+        // Compute the objective value of each particle at the
+        // current position. If it is the first iteration, assign
+        // pObjBest to the current objective value
+        fn_computeObjective (iteration);
+        
+        // Compute the velocity of each particle
+        fn_computeVelocity ();
+
+        // Update the position of each particle based on their
+        // velocity. Make sure the particle does not leave the
+        // search space
+        fn_updatePosition (min, max);
+
+        // Debug information
+        if (debug) {
+            printf ("%d: @(%f, %f)\n", iteration, gBest.x, gBest.y);
+            if (   (iteration == 0)
+                || (iteration == 10)
+                || (iteration == 20)
+                || (iteration == 30)
+                || (iteration == 40)) {
+                for (p=0; p<N; p++) {
+                    fprintf (  pts
+                             , "%f %f\n"
+                             , position[p].x
+                             , position[p].y);
+                }
+
+                fprintf (pts, "\n");
+            }
+        }
+    }
+
+    fclose (pts);
+}
+
+@
+\end{document}

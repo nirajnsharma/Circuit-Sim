@@ -1,0 +1,185 @@
+\documentclass{article}
+\usepackage{noweb}
+\usepackage{amsmath}
+\title{Polynoimial Fit Using Least Squares Approximation}
+\author{184077001@iitb.ac.in}
+\begin{document}
+\maketitle
+
+<<includes>>=
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+
+int debug = 1;
+
+<<file-io>>
+
+@
+Given a set of measurements in a noisy system, the task is to
+find the lowest degree polynomial which would best fit the
+observations. In this case the observations are laid as
+two-tuples in a file, which the following function reads. The
+contents of the file can be visualized as two vectors:
+
+\[x = 
+\begin{bmatrix} 
+x_1 \\
+x_2 \\
+x_3 \\
+... \\
+x_n \\
+\end{bmatrix} 
+\]
+and,
+\[y =
+\begin{bmatrix} 
+y_1 \\
+y_2 \\
+y_3 \\
+... \\
+y_n \\
+\end{bmatrix} 
+\]
+
+<<file-io>>=
+void read_two_arrays_from_file (
+     const char *filename
+   , int M
+   , double *a
+   , double *b) {
+   FILE *file;
+   file = fopen(filename, "r");
+   double d1, d2;
+   int i = 0;
+   while(fscanf(file, "%lf,%lf\n", &d1, &d2) != EOF && i < M) {
+      a[i] = d1;
+      b[i] = d2;
+      ++i;
+   }
+   fclose(file);
+}
+
+<<lapack-prototype>>
+
+@
+In order to solve the over-determined system of equations,
+$Ax = b$, we use the LAPACK solver:
+
+<<lapack-prototype>>=
+void dgels_(
+     const char *TRANS
+   , int *   M
+   , int *   N
+   , int *   NRHS
+   , double *A
+   , int *   LDA
+   , double *B
+   , int *   LDB
+   , double *WORK
+   , int *   LWORK
+   , int *   INFO);
+
+<<squares-matrix>>
+
+@
+The squares-matrix is organized as a $N\times M$ (assuming a M-1
+degree polynomial), and $N$ is the number of measurements. We do
+not want to increase $M$ arbitrarily as there is a danger of
+\emph{over-fitting}:
+\[
+J =
+\begin{bmatrix} 
+1 x_1 x_1^2 x_1^3 ... x_1^{M-1} \\
+1 x_2 x_2^2 x_2^3 ... x_2^{M-1} \\
+1 x_3 x_3^2 x_3^3 ... x_3^{M-1} \\
+... \\
+... \\
+1 x_n x_n^2 x_n^3 ... x_n^{M-1} \\
+\end{bmatrix} 
+\]
+
+The matrix will be prepared in column-major form for the DGELS
+solver:
+
+<<squares-matrix>>=
+void prepare_A_matrix (
+     const double *a
+   , double *A
+   , int M
+   , int N) {
+
+   int c = 0;  // Column iterator
+   int r = 0;  // Row iterator
+
+   // Filling the matrix column-wise because that is what the
+   // sub-routines expect
+   for (c=0; c<M; c++) {
+      for (r=0; r<N; r++) {
+         // The first column is all ones - the constant term
+         if (c == 0) {
+            A [r] = 1.0;
+         } else {
+            // Each col has the a values raised to that pow
+            A [(c*N)+r] = pow (a[r], c);
+         }
+      }
+   }
+}
+
+int main(int argc, char *argv[]) {
+   double *a, *A;
+   double *b;
+   int M;
+   int N;
+   int i, j;
+   int INFO;
+   double *WORK;
+   int NRHS = 1;
+   int LDA;
+   int LDB;
+   int LWORK;
+
+
+   if (argc < 4) {
+      printf("Usage: %s datafile lines order\n", argv[0]);
+      return 1;
+   }
+
+   LDA = LDB = M = atoi(argv[2]);
+   N = atoi(argv[3]) + 1;
+
+   a = malloc(sizeof(double) * M);
+   b = malloc(sizeof(double) * M);
+
+   read_two_arrays_from_file(argv[1], M, a, b);
+   A = malloc(sizeof(double) * M * N);
+   prepare_A_matrix(a, A, M, N);
+
+   // These are incantations from the LAPACK manual
+   LWORK = 64 * M + M;
+   WORK = malloc(sizeof(double) * LWORK);
+
+   // Indicates that the matrix is in column-major form
+   const char *trans = "N";
+
+   dgels_(trans,
+       &M,
+       &N,
+       &NRHS,
+       A,
+       &LDA,
+       b,
+       &LDB,
+       WORK,
+       &LWORK,
+       &INFO);
+
+   printf("\n");
+   for (i = 0; i < N; ++i) printf("%f\n", b[i]);
+   free(a); free(b); free(WORK);
+   return 0;
+}
+
+@
+\end{document}

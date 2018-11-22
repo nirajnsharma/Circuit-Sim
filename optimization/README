@@ -1,0 +1,9 @@
+Contains implementation of optimization techniques like:
+
+  - Particle Swarm
+
+Run:
+
+  ./build_all.sh
+
+to build all the source and documentation
